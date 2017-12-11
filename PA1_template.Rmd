@@ -1,25 +1,205 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
+title: "Reproducible Research Project 1"
+author: "Neil Lamarre"
+date: "December 9, 2017"
 output: 
-  html_document:
-    keep_md: true
+      html_document:
+            keep_md: true
 ---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
 
-
-## Loading and preprocessing the data
-
-
-
-## What is mean total number of steps taken per day?
-
-
-
-## What is the average daily activity pattern?
+###Assignment:
+Create a markdown document walking through the exploratory data analysis of the dataset
 
 
 
-## Imputing missing values
+###Package dependencies:
+```{r, results='hide', warning=FALSE, message=FALSE}
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+library(gridExtra)
+```
+
+###Loading and preprocessing the data:  
+  
+The following chunk of code checks to see if the data for this project has already been downloaded, and proceeds to download and unzip the file **only if** it is not already present in the working directory.
+```{r download, results='hide', cache=TRUE}
+if(!file.exists("./activity.csv")){
+      #proceeds if absent with download, and unzip
+      temp<-tempfile("./temp.zip")
+      fileUrl<-"https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+      download.file(fileUrl,destfile = "./temp.zip")
+      unzip("./temp.zip")
+      unlink("./temp.zip")
+} 
+```
 
 
+Now we will read the CSV file into R as a data frame. The second line of code converts the dates into the appropriate variable class.
+```{r readin, cache=TRUE}
+act<-read.csv("activity.csv", header = TRUE)
+act$date<-ymd(act$date) #changing to date class
+```
 
-## Are there differences in activity patterns between weekdays and weekends?
+Now let's dive into the analysis and start to answer some questions with this data.  
+  
+###What is the mean total number of steps taken per day?  
+  
+Utilizing 'dplyr' package, we will create a summary table of the mean, median, and total number of steps broken down by day 
+```{r summarize}
+daily<- act %>%  #getting steps per day
+      group_by(date) %>%
+      summarize(count = n(),
+                mean = mean(steps, na.rm = T),
+                median = median(steps, na.rm = T),
+                total_steps = sum(steps)) %>%
+      print(daily, n=61)
+summary(daily$total_steps)
+```      
+What we can see from the above table is that 8 days are completely missing (perhaps subject forgot to charge or wear the fitbit). 
+  
+  
+Let's create a histogram of the total number of steps per day  
+```{r histo, fig.width=10, warning=FALSE}
+h<-ggplot(daily, aes(total_steps))
+h+geom_histogram(binwidth = 500)
+```
+Hmm, there are only 61 days in the dataset so that looks OK (perhaps a little sparse, but somewhat resembles a normal distrubtion in overall shape).  
+
+The following code creates a graph that displays the total steps per day for each day in the dataset:
+```{r stepsperday, warning=FALSE, fig.width=10}
+g<-ggplot(daily, aes(date, total_steps))
+g+geom_bar(stat="identity")
+```
+[*note: this is not a histogram*](https://www.forbes.com/sites/naomirobbins/2012/01/04/a-histogram-is-not-a-bar-chart/)  
+  
+###What is the average daily activity pattern?
+  
+To show the average steps taken for each interval, we'll make a new summary table grouping by interval.
+```{r interval}
+interval<- act %>%
+      group_by(interval = interval) %>%
+      summarize(count = n(),
+                AverageSteps = mean(steps, na.rm =T)) %>%
+      print()
+summary(interval$AverageSteps)
+```
+We can see from the summary table that the maximum **mean** steps per 5 minute interval is ~206.  Let's see which interval this peak corresponds to.  Using the 'filter' function, I'm selecting all rows (intervals)from the summary dataset where the mean number of steps is greater than 200.
+```{r peak}
+filter(interval, AverageSteps > 200)
+```
+We can see that the interval that corresponds to the maximum **mean** steps per 5 minutes is 835, or 8:35-8:40am.  
+  
+Here is a time-series plot showing the average number of steps shown for each 5 minute interval
+```{r tsDaily, fig.width=10}
+t<-ggplot(interval, aes(interval, AverageSteps))
+t+geom_line()
+```
+One thing to note:  the interval is actually the concatenated hour and minute of the start of a 5min interval, ie 1000 = 10:00am.  This is why the x-axis goes to 2400 instead of the 1440 minutes in 24 hours.
+  
+  
+###Imputing missing values
+How many missing values do we have?
+```{r missing}
+summary(act$steps)
+```
+
+Wow, there are quite a few missing values - over 10%!  To try get a better picture of the average daily activity, I'd like to impute the average value for that interval.  We also notice that the number of complete missing days (8), times the number of 5min intervals per day (288) = 2304, the number of missing values in the dataset.  Therefore, there are no days with a few missing values, only entire days missing.
+  
+I'm going to first duplicate the dataset, so we can compare the imputed dataset to the original.  
+Then I'll use a 'for loop' to replace the NAs with the average value for that interval.  
+Finally, I'll compare the 'steps' variable for the imputed and original datasets.
+```{r impute, warning=FALSE}
+actimp<-act 
+
+for (i in 1:nrow(actimp)) {
+      if (is.na(actimp$steps[i])){
+            int<-actimp$interval[i] 
+            imp<-interval$AverageSteps[interval == int] 
+            actimp$steps[i]<-round(imp, digits=0) #rounded off to whole steps
+      }
+}
+summary(actimp$steps)
+summary(act$steps)
+```
+OK! Confirmation that there are no longer any NAs in the new dataset, and it shows that both the mean and median values have not changed.  One possible downside of imputing the values this way is that each of the 8 missing days-worth of data is imputed with exactly the same values.  A better way to approach this may have been to use the average values for the corresponding day of the week.  
+  
+
+Before we check out some plots of this new dataset, we'll recreate the daily activity summary of the new dataset with imputed values.
+```{r imputedSummary}
+dailyimp<- actimp %>% 
+      group_by(date) %>%
+      summarize(count = n(),
+                mean = mean(steps, na.rm = T),
+                median = median(steps, na.rm = T),
+                total_steps = sum(steps)) %>%
+      print(dailyimp, n=61)
+summary(dailyimp$total_steps)
+summary(daily$total_steps)
+```
+We see that the mean and median of the **total daily step counts** have not changed (like the ungrouped step counts before and after imputing the missing values).  
+  
+Let's revist the histogram we made for the original dataset, showing total number of steps per day with the missing values imputed.
+```{r histo2, fig.width=10, warning=FALSE}
+require(gridExtra)
+orig<-h+geom_histogram(binwidth = 500)+ylim(0,11)
+h2<-ggplot(dailyimp, aes(total_steps))
+newhisto<-h2+geom_histogram(binwidth = 500)
+grid.arrange(orig, newhisto, ncol=2, top="Histograms of Total Steps per Day: Original Data (left) vs Imputed (right)")
+```
+So by imputing the missin gvalues with the mean of that interval, we've gone from 3 to 11 days with 10,500-11,000 total steps, with no other changes. 
+(A gain of 8!! Since we already noticed all 8 days were imputed with identical values -- using the means of each interval.  This make sense.)  
+
+  
+###Are there differences in activity patterns between weekdays and weekends?
+First, we'll use the 'wday' function from the lubridate package to identify the day of the week form the date variable.  We'll use that number to create a new variable called 'type.'  Note wday returns a number 1-7 corresponding to the day of the week (starting with 1=Monday).  Then we'll convert that variable into a factor.
+```{r pullWeekday}
+for (i in 1:nrow(actimp)) {
+      if (wday(actimp$date[i]) > 5){
+            actimp$type[i]<- as.character("weekend") 
+      }
+      else {(actimp$type[i]<- as.character("weekday"))}
+}
+actimp$type<-as.factor(actimp$type)
+str(actimp$type)
+```
+We can confirm with a call to 'str' (structure) that the column 'type' is a factor with two values: 'weekday' or 'weekend'  
+  
+We'd like to test whether the average daily activity is greater on the weekend, so we'll create  another summary with dplry for the average steps by interval for weekend vs weekday.
+```{r weekendVSweekday}
+weekend<- actimp %>%
+      group_by(day = type, interval = interval) %>%
+      summarize(count = n(),
+                meanSteps = mean(steps),
+                totalSteps = sum(steps)) %>%
+      print()
+```
+  
+Now, to create a plot evaluating the time-series step data we saw before, broken down by weekday vs weekend:  
+```{r VSpanel, fig.width=10, fig.height=7}
+wkdays<-ggplot(weekend, aes(interval, meanSteps))
+wkdays+facet_grid(day~.)+geom_line()+
+      labs(title="Weekday vs Weekend activity")
+```
+  
+Excellent!  As you might expect, there does appear to be a greater amount of activity (on average) on the weekends vs weekdays.  There is a slight decrease in the activity in the morning, from around 5:30-8:00am before the large peak that consistently occurs around 8-9am.  Interestingly, this peak is in the same place on both weekends and weekdays!  There is more activity between about 12:30-4pm on weekends vs weekdays.
+
+```{r validate}
+weektotal<- weekend %>%
+      group_by(day) %>%
+      summarize(count = n(),
+                AverageSteps = sum(meanSteps)) %>% 
+            #this is the sum of the interval means for weekday vs weekend 
+      print()
+```
+Finally, we see the average total number of steps per day on a weekday vs weekend day.  
+  
+  
+###limitations
+One minor problem with this dataset is that interval is treated as a continuous variable (ie, counting in consecutive 5 minute intervals), when instead it represents the concatenated hour and minute of the subsequent 5min interval.  Since there are only 60 minutes in an hour, for every 100 "units" on the x-axis, there are no values from 60-95, creating "gaps" which a line graph (geom line) connects.  
+
+
+**end of analysis**
