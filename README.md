@@ -1,3 +1,8 @@
+###Note to Peer Reviewers
+Rstudio suggested I use the render function in the 'rmarkdown' package, instead of knitr.  
+Who am I to argue?  
+Thus, the figures are in the 'PA1_template_files/figure-html/' directory.
+
 ## Introduction
 
 It is now possible to collect a large amount of data about personal
