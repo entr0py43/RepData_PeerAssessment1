@@ -1,7 +1,5 @@
-###Note to Peer Reviewers
-Rstudio suggested I use the render function in the 'rmarkdown' package, instead of knitr.  
-Who am I to argue?  
-Thus, the figures are in the 'PA1_template_files/figure-html/' directory.
+https://entr0py43.github.io//RepData_PeerAssessment1//PA1_template.html   
+**note:** raw figures are in the 'PA1_template_files/figure-html/' directory.
 
 ## Introduction
 
